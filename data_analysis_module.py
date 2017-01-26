@@ -22,8 +22,6 @@ IMPROVEMENTS
 
 '''
 
-# commit with correct username/email
-
 import numpy as np
 import scipy as sp
 import matplotlib.pyplot as plt
@@ -439,9 +437,9 @@ class getData:
         return dataLine
         
     def getHist(self, binSize = 100):
-        data1D = self.data.ravel() # need 1D array for hist
+        scan_objD = self.data.ravel() # need 1D array for hist
         fig = plt.figure(100, facecolor = 'white')
-        histValue = plt.hist(data1D, bins = 100)
+        histValue = plt.hist(scan_objD, bins = 100)
         
         histReturn = [[], []]        
         
@@ -632,34 +630,13 @@ def shiftMatrixVert(orig_matrix,I,J,m):
                 new_matrix[int(i),int(j)] = orig_matrix[int(i+m-I),int(j)]             
     return new_matrix 
 
-def align_scans(filename1, filename2, data_type = 'mag'):
+def align_scans(scan_obj1, scan_obj2, pixels):
     
-    if data_type == 'mag': 
-        data1 = getMag(filename1)    
-        data2 = getMag(filename2)    
-    elif data_type == 'susc':
-        data1 = getSusc(filename1)    
-        data2 = getSusc(filename2)   
-    elif data_type == 'dPhi_dI':
-        data1 = get_dPhi_dI(filename1)    
-        data2 = get_dPhi_dI(filename2) 
-    elif data_type == 'dPhi_dV':
-        data1 = get_dPhi_dV(filename1)    
-        data2 = get_dPhi_dV(filename2) 
-    elif data_type == 'suscy':
-        data1 = getSuscy(filename1)    
-        data2 = getSuscy(filename2) 
-    elif data_type == 'cap':
-        data1 = getCap(filename1)    
-        data2 = getCap(filename2) 
-    else:
-        raise ValueError('data_type invalid')
         
-        
-    I = int(data1.specs['xpixel'])
-    J = int(data1.specs['ypixel'])
+    I = int(scan_obj1.specs['xpixel'])
+    J = int(scan_obj2.specs['ypixel'])
     
-    if (data1.specs ['xpixel'] != data2.specs ['xpixel']) | (data1.specs ['ypixel'] != data2.specs ['ypixel']):
+    if (scan_obj1.specs ['xpixel'] != scan_obj2.specs ['xpixel']) | (scan_obj1.specs ['ypixel'] != scan_obj2.specs ['ypixel']):
         print('Warning: x and y pixels are not the same between matrices')
     
     # Part 3: Perform X^2 routine
@@ -668,15 +645,15 @@ def align_scans(filename1, filename2, data_type = 'mag'):
     # can be different for x and y, but for this code, we will 
     # shift the matrices equal amounts
     
-    shift_pixels = np.linspace(-5,5,11)
+    shift_pixels = np.linspace(-pixels, pixels,2*pixels +1)
     
     X_sqr = np.zeros([shift_pixels.size,shift_pixels.size])
     for n in range(shift_pixels.size):
-        #print 'n = ' + str(shift_pixels[n])
+        print 'pixels shifted: ' + str(shift_pixels[n])
         for m in range(shift_pixels.size):
             X_sqr_nm = 0
-            M1 = data1.data
-            M2 = shiftMatrixHorz(data2.data,I,J,shift_pixels[n])
+            M1 = scan_obj1.data
+            M2 = shiftMatrixHorz(scan_obj2.data,I,J,shift_pixels[n])
             M2 = shiftMatrixVert(M2,I,J,shift_pixels[m])  
             for i in range(10,I-10): # only look at values not wrapped
                 for j in range(10,J-10): # only look at values not wrapped
@@ -692,8 +669,8 @@ def align_scans(filename1, filename2, data_type = 'mag'):
     n_best = shift_pixels[temp[0][0]]
     m_best = shift_pixels[temp[1][0]]
     
-    M1 = data1.data
-    M2 = shiftMatrixHorz(data2.data,I,J,n_best)
+    M1 = scan_obj1.data
+    M2 = shiftMatrixHorz(scan_obj2.data,I,J,n_best)
     M2 = shiftMatrixVert(M2,I,J,m_best)  
     
     M3 = M1-M2
