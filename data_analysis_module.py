@@ -22,6 +22,8 @@ IMPROVEMENTS
 
 '''
 
+# Testing a commit from local machine to github
+
 import numpy as np
 import scipy as sp
 import matplotlib.pyplot as plt
