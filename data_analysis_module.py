@@ -22,8 +22,6 @@ IMPROVEMENTS
 
 '''
 
-# Testing a commit from local machine to github
-
 import numpy as np
 import scipy as sp
 import matplotlib.pyplot as plt
@@ -565,6 +563,23 @@ class getSuscy (getData):
         self.toString = {'xlabel': r'x [$\mu$m]', 'ylabel':
                          'y [$\mu$m]', 'title': 'Out-of-Phase Susceptibility File of ' + fileName}
         return
+
+# define class: getSuscy
+# Created 11/4/2014
+#
+# Extends getData class, specifically for capacitance
+class getCap (getData):
+
+    # method: constructor
+    # Created 01/26/2017
+    #
+    # Requires fileName. This method will load the capacitance file.
+    def __init__(self,fileName):
+        getData.__init__(self,fileName)
+        self.data = self.data * V_TO_mV
+        self.toString = {'xlabel': r'x [$\mu$m]', 'ylabel':
+                         'y [$\mu$m]', 'title': 'Capacitance File of ' + fileName}
+        return
     
 
 '''
@@ -613,4 +628,80 @@ def shiftMatrixVert(orig_matrix,I,J,m):
                 new_matrix[int(i),int(j)] = orig_matrix[int(i+m), int(j)] 
             else: 
                 new_matrix[int(i),int(j)] = orig_matrix[int(i+m-I),int(j)]             
-    return new_matrix  
+    return new_matrix 
+
+def align_scans(filename1, filename2, data_type = 'mag'):
+    
+    if data_type == 'mag': 
+        data1 = getMag(filename1)    
+        data2 = getMag(filename2)    
+    elif data_type == 'susc':
+        data1 = getSusc(filename1)    
+        data2 = getSusc(filename2)   
+    elif data_type == 'dPhi_dI':
+        data1 = get_dPhi_dI(filename1)    
+        data2 = get_dPhi_dI(filename2) 
+    elif data_type == 'dPhi_dV':
+        data1 = get_dPhi_dV(filename1)    
+        data2 = get_dPhi_dV(filename2) 
+    elif data_type == 'suscy':
+        data1 = getSuscy(filename1)    
+        data2 = getSuscy(filename2) 
+    elif data_type == 'cap':
+        data1 = getCap(filename1)    
+        data2 = getCap(filename2) 
+    else:
+        raise ValueError('data_type invalid')
+        
+        
+    I = int(data1.specs['xpixel'])
+    J = int(data1.specs['ypixel'])
+    
+    if (data1.specs ['xpixel'] != data2.specs ['xpixel']) | (data1.specs ['ypixel'] != data2.specs ['ypixel']):
+        print('Warning: x and y pixels are not the same between matrices')
+    
+    # Part 3: Perform X^2 routine
+    # --------------------------------------------------
+    # define how much to shift the matrix by in shift_pixels
+    # can be different for x and y, but for this code, we will 
+    # shift the matrices equal amounts
+    
+    shift_pixels = np.linspace(-5,5,11)
+    
+    X_sqr = np.zeros([shift_pixels.size,shift_pixels.size])
+    for n in range(shift_pixels.size):
+        #print 'n = ' + str(shift_pixels[n])
+        for m in range(shift_pixels.size):
+            X_sqr_nm = 0
+            M1 = data1.data
+            M2 = shiftMatrixHorz(data2.data,I,J,shift_pixels[n])
+            M2 = shiftMatrixVert(M2,I,J,shift_pixels[m])  
+            for i in range(10,I-10): # only look at values not wrapped
+                for j in range(10,J-10): # only look at values not wrapped
+                    X_sqr_temp = (M1[i,j] - M2[i,j]) * (M1[i,j] - M2[i,j])
+                    X_sqr_nm = X_sqr_nm + X_sqr_temp                                       
+            X_sqr[n,m] = X_sqr_nm
+    
+    
+    # Part 4: Determine best n and m that minimizes X^2
+    # -------------------------------------------------
+    
+    temp = np.where(X_sqr == X_sqr.min())
+    n_best = shift_pixels[temp[0][0]]
+    m_best = shift_pixels[temp[1][0]]
+    
+    M1 = data1.data
+    M2 = shiftMatrixHorz(data2.data,I,J,n_best)
+    M2 = shiftMatrixVert(M2,I,J,m_best)  
+    
+    M3 = M1-M2
+    M3new = np.zeros((I-20,J-20))
+    for i in range(I-20): # only look at values not wrapped
+        for j in range(J-20): # only look at values not wrapped
+            M3new[i,j] = M3[i+10,j+10]
+            
+    mat_diff = M3new
+    x_best = n_best
+    y_best = m_best
+
+    return mat_diff, x_best, y_best
