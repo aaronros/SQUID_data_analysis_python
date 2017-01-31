@@ -610,27 +610,57 @@ def fitGauss(xdata, ydata, guess = None):
     popt[2] = abs(popt[2]) # want the sigma to be positive
     return (popt, pcov)    
 
-def shiftMatrixHorz(orig_matrix,I,J,n):
-    new_matrix = np.zeros((I,J))
-    for i in range(I):
-        for j in range(J):
-            if (j+n < J):
-                new_matrix[int(i),int(j)] = orig_matrix[int(i),int(j+n)] 
+
+'''
+Function: shiftMatrixHorz
+Usage: new_mat = shiftMatrixVert(old_mat, xpixels, ypixels, yshift)
+---
+Returns a matrix that is the original matrix shifted in x by an amount yshift.
+When values are shifted over the matrix bounds, this function attaches those 
+values to the begining
+'''  
+def shiftMatrixHorz(orig_matrix,xpixels,ypixels,yshift):
+    new_matrix = np.zeros((xpixels,ypixels))
+    for i in range(xpixels):
+        for j in range(ypixels):
+            if (j+yshift < ypixels):
+                new_matrix[int(i),int(j)] = orig_matrix[int(i),int(j+yshift)] 
             else: 
-                new_matrix[int(i),int(j)] = orig_matrix[int(i),int(j+n-J)]             
+                new_matrix[int(i),int(j)] = orig_matrix[int(i),
+                           int(j+yshift-ypixels)]             
     return new_matrix
   
-def shiftMatrixVert(orig_matrix,I,J,m):
-    new_matrix = np.zeros((I,J))
-    for i in range(I):
-        for j in range(J):
-            if (i+m < I):
-                new_matrix[int(i),int(j)] = orig_matrix[int(i+m), int(j)] 
+'''
+Function: shiftMatrixVert
+Usage: new_mat = shiftMatrixVert(old_mat, xpixels, ypixels, xshift)
+---
+Returns a matrix that is the original matrix shifted in x by an amount xshift.
+When values are shifted over the matrix bounds, this function attaches those 
+values to the begining
+'''  
+def shiftMatrixVert(orig_matrix,xpixels,ypixels,xshift):
+    new_matrix = np.zeros((xpixels,ypixels))
+    for i in range(xpixels):
+        for j in range(ypixels):
+            if (i+xshift < xpixels):
+                new_matrix[int(i),int(j)] = orig_matrix[int(i+xshift), int(j)] 
             else: 
-                new_matrix[int(i),int(j)] = orig_matrix[int(i+m-I),int(j)]             
+                new_matrix[int(i),int(j)] = orig_matrix[int(i+xshift-xpixels),
+                           int(j)]             
     return new_matrix 
 
-def align_scans(scan_obj1, scan_obj2, pixels):
+
+'''
+Function: align_scans
+Usage: mat_diff, x_best, y_best = align_scans(mag_obj1, mag_obj2)
+---
+Given two image objects that are nominally identical, this functions
+finds how much to shift scan_obj2 relative to scan_obj1 to get the 
+correct alignment. This function returns the difference between the two 
+objects when correctly shifted, and the best shift in x and y
+'''
+def align_scans(scan_obj1, scan_obj2, pixels, plot_cor = False, 
+                plot_diff = False, plot_neigh_diff = False):
     
         
     I = int(scan_obj1.specs['xpixel'])
@@ -655,8 +685,8 @@ def align_scans(scan_obj1, scan_obj2, pixels):
             M1 = scan_obj1.data
             M2 = shiftMatrixHorz(scan_obj2.data,I,J,shift_pixels[n])
             M2 = shiftMatrixVert(M2,I,J,shift_pixels[m])  
-            for i in range(10,I-10): # only look at values not wrapped
-                for j in range(10,J-10): # only look at values not wrapped
+            for i in range(pixels, I - pixels): # only look at values not wrapped
+                for j in range(pixels, J - pixels): # only look at values not wrapped
                     X_sqr_temp = (M1[i,j] - M2[i,j]) * (M1[i,j] - M2[i,j])
                     X_sqr_nm = X_sqr_nm + X_sqr_temp                                       
             X_sqr[n,m] = X_sqr_nm
@@ -674,13 +704,57 @@ def align_scans(scan_obj1, scan_obj2, pixels):
     M2 = shiftMatrixVert(M2,I,J,m_best)  
     
     M3 = M1-M2
-    M3new = np.zeros((I-20,J-20))
-    for i in range(I-20): # only look at values not wrapped
-        for j in range(J-20): # only look at values not wrapped
-            M3new[i,j] = M3[i+10,j+10]
+    M3new = np.zeros((I-2*pixels,J-2*pixels))
+    for i in range(I-2*pixels): # only look at values not wrapped
+        for j in range(J-2*pixels): # only look at values not wrapped
+            M3new[i,j] = M3[i+pixels,j+pixels]
             
     mat_diff = M3new
     x_best = n_best
     y_best = m_best
+    
+    if plot_cor:
+        fig1 = plt.figure(facecolor = 'white')
+        plt.imshow(X_sqr, interpolation = 'none')
+        cb = plt.colorbar(orientation = 'vertical', cmap = 'seismic')
+        cb.set_label('$\chi_2 [a.u.]$', fontsize = plot_font)   
+        plt.xlabel('x shift', fontsize = plot_font)
+        plt.ylabel('y shift', fontsize = plot_font)
+        plt.title('$\Chi^2$ plot to align images', fontsize = plot_font)
+        plt.show()        
+
+    if plot_diff:
+        fig2 = plt.figure(facecolor = 'white')
+        plt.imshow(mat_diff, interpolation = 'none', cmap = 'gray')
+        cb = plt.colorbar(orientation = 'vertical')
+        plt.xlabel('x [a.u.]', fontsize = plot_font)
+        plt.ylabel('y [a.u.]', fontsize = plot_font)
+        plt.title('Difference image used best x,y shifts', fontsize = plot_font)
+        plt.show()   
+        
+    if plot_neigh_diff:
+        for k in [-1,0,1]:
+            for l in [-1,0,1]:
+                if not l == 0 and not k == 0:
+                    M2 = shiftMatrixHorz(scan_obj2.data,I,J,n_best + k)
+                    M2 = shiftMatrixVert(M2,I,J,m_best + l)
+                    M3 = M1 - M2
+                    M3new = np.zeros((I-2*pixels,J-2*pixels))
+                    for i in range(I-2*pixels): # only look at values not wrapped
+                        for j in range(J-2*pixels): # only look at values not wrapped
+                            M3new[i,j] = M3[i+pixels,j+pixels]
+                    fig3 = plt.figure(facecolor = 'white')
+                    plt.imshow(M3new, interpolation = 'none', cmap = 'gray')
+                    cb = plt.colorbar(orientation = 'vertical')
+                    plt.xlabel('x [a.u.]', fontsize = plot_font)
+                    plt.ylabel('y [a.u.]', fontsize = plot_font)
+                    plt.title('Neighbor Image: x best + ' + str(k) + ', y best ' + str(l), 
+                              fontsize = plot_font)
+                    plt.show()   
+                
+            
+       
+    print('x shift: ' + str(x_best))
+    print('y shift: ' + str(y_best))
 
     return mat_diff, x_best, y_best
