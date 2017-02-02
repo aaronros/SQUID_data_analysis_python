@@ -26,7 +26,10 @@ import numpy as np
 import scipy as sp
 import matplotlib.pyplot as plt
 import scipy.optimize as opt
+from scipy import signal
 import pandas as pd
+import copy
+
 
 
 '''
@@ -321,7 +324,7 @@ class getData:
                 ylength = float(temp)
 
 
-        self.specs = {'xpixel': xpixel, 'ypixel': ypixel, 'xlength':
+        self.specs = {'xpixel': int(xpixel), 'ypixel': int(ypixel), 'xlength':
                       xlength * 10**6,'ylength': ylength * 10**6}
         self.toString = {'xlabel': r'x [$\mu$m]', 'ylabel':
                          'y [$\mu$m]', 'title': 'Data File of '
@@ -482,7 +485,7 @@ class getMag (getData):
     def __init__(self,fileName):
         getData.__init__(self,fileName)
         self.globalSubtract()
-        self.data = scale_2D_list(self.data, float(1)/(VtoPhi * gainDC))
+        self.data = self.data/(VtoPhi * gainDC)
         self.toString = {'xlabel': r'x [$\mu$m]', 'ylabel':
                          'y [$\mu$m]', 'title': 'Magnetometry File of ' + fileName}
         return
@@ -501,7 +504,7 @@ class get_dPhi_dI (getData):
     def __init__(self,fileName):
         getData.__init__(self,fileName)
         self.globalSubtract()
-        self.data = scale_2D_list(self.data, float(1)/(VtoPhi * gainLockAux2 * I_sample))
+        self.data = self.data/(VtoPhi * gainLockAux2 * I_sample)
         self.toString = {'xlabel': r'x [$\mu$m]', 'ylabel':
                          'y [$\mu$m]', 'title': 'dPhi/dI File of ' + fileName}
         return
@@ -520,7 +523,7 @@ class get_dPhi_dV (getData):
     def __init__(self,fileName):
         getData.__init__(self,fileName)
         self.globalSubtract()
-        self.data = scale_2D_list(self.data, float(1)/(VtoPhi * gainLockAux2 * Vapplied))
+        self.data = self.data/(VtoPhi * gainLockAux2 * Vapplied)
         self.toString = {'xlabel': r'x [$\mu$m]', 'ylabel':
                          'y [$\mu$m]', 'title': 'dPhi/dV File of ' + fileName}
         return
@@ -539,7 +542,7 @@ class getSusc (getData):
     def __init__(self,fileName):
         getData.__init__(self,fileName)
         self.globalSubtract()
-        self.data = scale_2D_list(self.data, float(1)/(VtoPhi * gainDC * I_FC))
+        self.data = self.data/(VtoPhi * gainDC * I_FC)
         self.toString = {'xlabel': r'x [$\mu$m]', 'ylabel':
                          'y [$\mu$m]', 'title': 'Susceptibility File of ' + fileName}
         return
@@ -559,7 +562,7 @@ class getSuscy (getData):
     def __init__(self,fileName):
         getData.__init__(self,fileName)
         self.globalSubtract()
-        self.data = self.scale_2D_list(self.data, float(1)/(VtoPhi * gainDC * I_sample))
+        self.data = self.data/(VtoPhi * gainDC * I_sample)
         self.toString = {'xlabel': r'x [$\mu$m]', 'ylabel':
                          'y [$\mu$m]', 'title': 'Out-of-Phase Susceptibility File of ' + fileName}
         return
@@ -586,18 +589,6 @@ class getCap (getData):
 General functions for data analysis
 '''
 
-def scale_list(vec, scale):
-    for i in range(len(vec)):
-        vec[i] = vec[i] * scale
-    return vec
-
-def scale_2D_list(matrix, scalar):
-    (row, col) = matrix.shape
-    for i in range(row):
-        for j in range(col):
-            matrix[i,j] = matrix[i,j] * scalar
-    return matrix
-    
 def funcGauss(x, a, x0, sigma):
     # x: discretized xaxis used as the independent value
     # a: amplitude
@@ -612,149 +603,77 @@ def fitGauss(xdata, ydata, guess = None):
 
 
 '''
-Function: shiftMatrixHorz
-Usage: new_mat = shiftMatrixVert(old_mat, xpixels, ypixels, yshift)
----
-Returns a matrix that is the original matrix shifted in x by an amount yshift.
-When values are shifted over the matrix bounds, this function attaches those 
-values to the begining
-'''  
-def shiftMatrixHorz(orig_matrix,xpixels,ypixels,yshift):
-    new_matrix = np.zeros((xpixels,ypixels))
-    for i in range(xpixels):
-        for j in range(ypixels):
-            if (j+yshift < ypixels):
-                new_matrix[int(i),int(j)] = orig_matrix[int(i),int(j+yshift)] 
-            else: 
-                new_matrix[int(i),int(j)] = orig_matrix[int(i),
-                           int(j+yshift-ypixels)]             
-    return new_matrix
-  
-'''
-Function: shiftMatrixVert
-Usage: new_mat = shiftMatrixVert(old_mat, xpixels, ypixels, xshift)
----
-Returns a matrix that is the original matrix shifted in x by an amount xshift.
-When values are shifted over the matrix bounds, this function attaches those 
-values to the begining
-'''  
-def shiftMatrixVert(orig_matrix,xpixels,ypixels,xshift):
-    new_matrix = np.zeros((xpixels,ypixels))
-    for i in range(xpixels):
-        for j in range(ypixels):
-            if (i+xshift < xpixels):
-                new_matrix[int(i),int(j)] = orig_matrix[int(i+xshift), int(j)] 
-            else: 
-                new_matrix[int(i),int(j)] = orig_matrix[int(i+xshift-xpixels),
-                           int(j)]             
-    return new_matrix 
-
-
-'''
 Function: align_scans
 Usage: mat_diff, x_best, y_best = align_scans(mag_obj1, mag_obj2)
 ---
 Given two image objects that are nominally identical, this functions
 finds how much to shift scan_obj2 relative to scan_obj1 to get the 
-correct alignment. This function returns the difference between the two 
-objects when correctly shifted, and the best shift in x and y
+correct alignment. This function returns two matrices for each of the shifted
 '''
-def align_scans(scan_obj1, scan_obj2, pixels, plot_cor = False, 
-                plot_diff = False, plot_neigh_diff = False):
+def align_scans(mag_obj1, mag_obj2, inplace = False, plot_corr = False,
+                pnt_text = True):  
     
-        
-    I = int(scan_obj1.specs['xpixel'])
-    J = int(scan_obj2.specs['ypixel'])
+    if pnt_text:
+        print('align_scans function called. Cross correlation in progress')
     
-    if (scan_obj1.specs ['xpixel'] != scan_obj2.specs ['xpixel']) | (scan_obj1.specs ['ypixel'] != scan_obj2.specs ['ypixel']):
-        print('Warning: x and y pixels are not the same between matrices')
-    
-    # Part 3: Perform X^2 routine
-    # --------------------------------------------------
-    # define how much to shift the matrix by in shift_pixels
-    # can be different for x and y, but for this code, we will 
-    # shift the matrices equal amounts
-    
-    shift_pixels = np.linspace(-pixels, pixels,2*pixels +1)
-    
-    X_sqr = np.zeros([shift_pixels.size,shift_pixels.size])
-    for n in range(shift_pixels.size):
-        print 'pixels shifted: ' + str(shift_pixels[n])
-        for m in range(shift_pixels.size):
-            X_sqr_nm = 0
-            M1 = scan_obj1.data
-            M2 = shiftMatrixHorz(scan_obj2.data,I,J,shift_pixels[n])
-            M2 = shiftMatrixVert(M2,I,J,shift_pixels[m])  
-            for i in range(pixels, I - pixels): # only look at values not wrapped
-                for j in range(pixels, J - pixels): # only look at values not wrapped
-                    X_sqr_temp = (M1[i,j] - M2[i,j]) * (M1[i,j] - M2[i,j])
-                    X_sqr_nm = X_sqr_nm + X_sqr_temp                                       
-            X_sqr[n,m] = X_sqr_nm
-    
-    
-    # Part 4: Determine best n and m that minimizes X^2
-    # -------------------------------------------------
-    
-    temp = np.where(X_sqr == X_sqr.min())
-    n_best = shift_pixels[temp[0][0]]
-    m_best = shift_pixels[temp[1][0]]
-    
-    M1 = scan_obj1.data
-    M2 = shiftMatrixHorz(scan_obj2.data,I,J,n_best)
-    M2 = shiftMatrixVert(M2,I,J,m_best)  
-    
-    M3 = M1-M2
-    M3new = np.zeros((I-2*pixels,J-2*pixels))
-    for i in range(I-2*pixels): # only look at values not wrapped
-        for j in range(J-2*pixels): # only look at values not wrapped
-            M3new[i,j] = M3[i+pixels,j+pixels]
-            
-    mat_diff = M3new
-    x_best = n_best
-    y_best = m_best
-    
-    if plot_cor:
-        fig1 = plt.figure(facecolor = 'white')
-        plt.imshow(X_sqr, interpolation = 'none')
-        cb = plt.colorbar(orientation = 'vertical', cmap = 'seismic')
-        cb.set_label('$\chi_2 [a.u.]$', fontsize = plot_font)   
-        plt.xlabel('x shift', fontsize = plot_font)
-        plt.ylabel('y shift', fontsize = plot_font)
-        plt.title('$\Chi^2$ plot to align images', fontsize = plot_font)
-        plt.show()        
+    x_shape = mag_obj1.specs['xpixel']
+    y_shape = mag_obj1.specs['ypixel']
 
-    if plot_diff:
-        fig2 = plt.figure(facecolor = 'white')
-        plt.imshow(mat_diff, interpolation = 'none', cmap = 'gray')
-        cb = plt.colorbar(orientation = 'vertical')
-        plt.xlabel('x [a.u.]', fontsize = plot_font)
-        plt.ylabel('y [a.u.]', fontsize = plot_font)
-        plt.title('Difference image used best x,y shifts', fontsize = plot_font)
-        plt.show()   
+    # self correlation to find the center point of the 2D correlation image
+    corr = signal.correlate2d(mag_obj1.data, mag_obj1.data)
+    y_self, x_self = np.unravel_index(np.argmax(corr), corr.shape)
+    
+    corr = signal.correlate2d(mag_obj1.data, mag_obj2.data)
+    y, x = np.unravel_index(np.argmax(corr), corr.shape)
+    y_shift = y_self - y
+    x_shift = x_self - x
+    
+    if pnt_text:
+        print('y_shift:' + str(y_shift))
+        print('x_shift:' + str(x_shift))    
+    
+    # copy matrices
+    M1 = copy.deepcopy(mag_obj1.data)
+    M2 = copy.deepcopy(mag_obj2.data)
+
+    # remove rows in y    
+    if x_shift > 0: 
+        # kill off first yshift rows of shifted image
+        M2 = M2[:, x_shift:]
+        M1 = M1[:, :y_shape - x_shift]            
+    elif x_shift < 0:
+        # kill last yshift rows of shifted image
+        M2 = M2[:, :y_shape - x_shift]
+        M1 = M1[:, x_shift:]            
+
+    # remove rows in x
+    if y_shift > 0:
+        # kill off first xshift rows of shifted image
+        M2 = M2[y_shift:, :]
+        M1 = M1[:x_shape - y_shift, :]
         
-    if plot_neigh_diff:
-        for k in [-1,0,1]:
-            for l in [-1,0,1]:
-                if not l == 0 and not k == 0:
-                    M2 = shiftMatrixHorz(scan_obj2.data,I,J,n_best + k)
-                    M2 = shiftMatrixVert(M2,I,J,m_best + l)
-                    M3 = M1 - M2
-                    M3new = np.zeros((I-2*pixels,J-2*pixels))
-                    for i in range(I-2*pixels): # only look at values not wrapped
-                        for j in range(J-2*pixels): # only look at values not wrapped
-                            M3new[i,j] = M3[i+pixels,j+pixels]
-                    fig3 = plt.figure(facecolor = 'white')
-                    plt.imshow(M3new, interpolation = 'none', cmap = 'gray')
-                    cb = plt.colorbar(orientation = 'vertical')
-                    plt.xlabel('x [a.u.]', fontsize = plot_font)
-                    plt.ylabel('y [a.u.]', fontsize = plot_font)
-                    plt.title('Neighbor Image: x best + ' + str(k) + ', y best ' + str(l), 
-                              fontsize = plot_font)
-                    plt.show()   
+    elif y_shift < 0:
+        # kill off first xshift rows of shifted image
+        M2 = M2[:x_shape - y_shift, :]
+        M1 = M1[y_shift:, :]
                 
-            
-       
-    print('x shift: ' + str(x_best))
-    print('y shift: ' + str(y_best))
+    if plot_corr:
+        fig = plt.figure(facecolor = 'white')
+        plt.imshow(corr, cmap = 'RdYlGn')
+        plt.xlabel('', fontsize = plot_font)
+        plt.ylabel('', fontsize = plot_font)        
+        plt.title('Correlation between images', fontsize = plot_font)        
 
-    return mat_diff, x_best, y_best
+    if inplace:
+        mag_obj1.data = M1
+        mag_obj2.data = M2   
+    else:
+        return M1, M2
+    
+    
+    
+    
+    
+    
+        
+
