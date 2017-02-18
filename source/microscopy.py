@@ -67,19 +67,19 @@ class get_data(object):
         with open(self.filename) as f:
             self.data = np.loadtxt(f)
             
-    def removeCol(self, colNumber):
+    def removecol(self, colNumber):
         self._specs['xpixel'] -= 1
         microns_to_pixels = self._specs['xlength']/float(self._specs['xpixel'])
         self._specs['xlength'] -= microns_to_pixels
         self.data = sp.delete(self.data, colNumber, 1) # 1 is the dimension
 
-    def removeRow(self, rowNumber):
+    def removerow(self, rowNumber):
         self._specs['ypixel'] -= 1
         microns_to_pixels = self._specs['ylength']/float(self._specs['ypixel'])
         self._specs['ylength'] -= microns_to_pixels
         self.data = sp.delete(self.data, colNumber, 0) # 0 is the dimension
 
-    def plotData(self, cmap = 'RdYlGn', CS = [None,None], cbLabel = None, figNumber = 1):
+    def plotdata(self, cmap = 'RdYlGn', CS = [None,None], cbLabel = None, figNumber = 1):
         #establish x and y axes
         fig = plt.figure(figNumber, facecolor = 'white')
         x = np.linspace(float(-self._specs['xlength']) / 2, float(self._specs['xlength']) / 2,
@@ -97,7 +97,6 @@ class get_data(object):
         plt.ylabel(self._specs['ylabel'], fontsize = plot_font)
         plt.title(self._specs['title'], fontsize = plot_font)
         plt.show()        
-        return
         
     def plotFFT2(self, cmap = 'BrBG', CS = [None,None], cbLabel = None, figNumber = 1):
         #establish x and y axes
@@ -116,8 +115,7 @@ class get_data(object):
         plt.xlabel('kx', fontsize = plot_font)
         plt.ylabel('ky', fontsize = plot_font)
         plt.title('Frequency Component', fontsize = plot_font)
-        plt.show()        
-        return  
+        plt.show()          
         
     def plotFFT2Log(self, cmap = 'BrBG', CS = [None,None], cbLabel = None, figNumber = 1):
         #establish x and y axes
@@ -136,14 +134,13 @@ class get_data(object):
         plt.xlabel('kx', fontsize = plot_font)
         plt.ylabel('ky', fontsize = plot_font)
         plt.title('Log of frequency component', fontsize = plot_font)
-        plt.show()        
-        return          
+        plt.show()                
               
-    def globalSubtract(self):
+    def globalsubtract(self):
         self.data = self.data - np.mean(self.data)
         
 
-    def aveLineSubtract(self):
+    def avelinesubtract(self):
         (row, col) = self.data.shape
         if col > row:
             for i in range(col):
@@ -153,7 +150,7 @@ class get_data(object):
                 self.data[j,:] = self.data[j,:] - np.mean(self.data[j,:])
         return
 
-    def vertLineCut(self,xpixel):
+    def vertlineCut(self,xpixel):
         (row, col) = self.data.shape
         y = np.linspace(float(-self._specs['ylength']) / 2,
                 float(self._specs['ylength']) / 2, self._specs['ypixel'])
@@ -164,7 +161,7 @@ class get_data(object):
             dataLine[i,1] = self.data[i,xpixel]
         return dataLine
 
-    def horzLineCut(self,ypixel):
+    def horzlinecut(self,ypixel):
         (row,col) = self.data.shape
         x = np.linspace(float(-self._specs['xlength']) / 2,
                      float(self._specs['xlength']) / 2, self._specs['xpixel'])
@@ -175,7 +172,7 @@ class get_data(object):
             dataLine[i,1] = self.data[ypixel,i]
         return dataLine
         
-    def getHist(self, binSize = 100):
+    def get_hist(self, binSize = 100):
         scan_objD = self.data.ravel() # need 1D array for hist
         fig = plt.figure(facecolor = 'white')
         histValue = plt.hist(scan_objD, bins = 100)
@@ -207,7 +204,7 @@ class get_data(object):
                 self.data[i,j] = np.median(pts_vec)
         return 
      
-class getMag (getData):
+class get_mag (getData):
 
     def __init__(self,fileName):
         getData.__init__(self,fileName)
