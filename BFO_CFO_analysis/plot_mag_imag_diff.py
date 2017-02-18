@@ -18,7 +18,6 @@ PHI0_TO_MPHI0 = 1000
 COLOR_SCALE = [-16,16]
 da.set_VtoPhi(0.332)
 da.set_GainDC(10)
-PIXELS_SHIFT = 20
 
 plt.close('all')
 
