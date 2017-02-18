@@ -207,4 +207,136 @@ class get_data(object):
                 self.data[i,j] = np.median(pts_vec)
         return 
      
-          
+class getMag (getData):
+
+    def __init__(self,fileName):
+        getData.__init__(self,fileName)
+        self.globalSubtract()
+        self._specs['title'] = 'Magnetometry scan: ' + fileName
+
+class get_dPhi_dI (getData):
+
+    def __init__(self,fileName):
+        getData.__init__(self,fileName)
+        self.globalSubtract()
+        self.data = self.data/(VtoPhi * gainLockAux2 * I_sample)
+        self._specs['title'] = 'd$\Phi$/dI scan: ' + fileName
+
+class get_dPhi_dV (getData):
+
+    def __init__(self,fileName):
+        getData.__init__(self,fileName)
+        self.globalSubtract()
+        self.data = self.data/(VtoPhi * gainLockAux2 * Vapplied)
+        self._specs['title'] = 'd$\Phi$/dV scan: ' + fileName
+      
+        
+class get_susc (getData):
+
+    def __init__(self,fileName):
+        getData.__init__(self,fileName)
+        self.globalSubtract()
+        self.data = self.data/(VtoPhi * gainDC * I_FC)
+        self._specs['title'] = 'Susc scan: ' + fileName
+
+
+class get_suscy (getData):
+
+    def __init__(self,fileName):
+        getData.__init__(self,fileName)
+        self.globalSubtract()
+        self.data = self.data/(VtoPhi * gainDC * I_sample)
+        self._specs['title'] = 'Suscy scan: ' + fileName
+        return
+
+class get_cap (get_data):
+
+    def __init__(self,filename):
+        getData.__init__(self,filename)
+        self.data = self.data * V_TO_mV
+        self._specs['title'] = 'Capacitance scan: ' + fileName
+    
+
+'''
+General functions for data analysis
+'''
+
+def funcGauss(x, a, x0, sigma):
+    # x: discretized xaxis used as the independent value
+    # a: amplitude
+    # x0: peak values of gaussian function
+    # sigma: sigma
+    return a * np.exp(-(x-x0)**2/(2*sigma**2))
+    
+def fitGauss(xdata, ydata, guess = None):
+    popt, pcov = opt.curve_fit(funcGauss, xdata, ydata, p0 = guess)
+    popt[2] = abs(popt[2]) # want the sigma to be positive
+    return (popt, pcov)            
+
+'''
+Function: align_scans
+Usage: mat_diff, x_best, y_best = align_scans(mag_obj1, mag_obj2)
+---
+Given two image objects that are nominally identical, this functions
+finds how much to shift scan_obj2 relative to scan_obj1 to get the 
+correct alignment. This function returns two matrices for each of the shifted
+'''
+def align_scans(mag_obj1, mag_obj2, inplace = False, plot_corr = False,
+                pnt_text = True):  
+    
+    if pnt_text:
+        print('align_scans function called. Cross correlation in progress')
+    
+    x_shape = mag_obj1.specs['xpixel']
+    y_shape = mag_obj1.specs['ypixel']
+
+    # self correlation to find the center point of the 2D correlation image
+    corr = signal.correlate2d(mag_obj1.data, mag_obj1.data)
+    y_self, x_self = np.unravel_index(np.argmax(corr), corr.shape)
+    
+    corr = signal.correlate2d(mag_obj1.data, mag_obj2.data)
+    y, x = np.unravel_index(np.argmax(corr), corr.shape)
+    y_shift = y_self - y
+    x_shift = x_self - x
+    
+    if pnt_text:
+        print('y_shift:' + str(y_shift))
+        print('x_shift:' + str(x_shift))    
+    
+    # copy matrices
+    M1 = copy.deepcopy(mag_obj1.data)
+    M2 = copy.deepcopy(mag_obj2.data)
+
+    # remove rows in y    
+    if x_shift > 0: 
+        # kill off first yshift rows of shifted image
+        M2 = M2[:, x_shift:]
+        M1 = M1[:, :y_shape - x_shift]            
+    elif x_shift < 0:
+        # kill last yshift rows of shifted image
+        M2 = M2[:, :y_shape - x_shift]
+        M1 = M1[:, x_shift:]            
+
+    # remove rows in x
+    if y_shift > 0:
+        # kill off first xshift rows of shifted image
+        M2 = M2[y_shift:, :]
+        M1 = M1[:x_shape - y_shift, :]
+        
+    elif y_shift < 0:
+        # kill off first xshift rows of shifted image
+        M2 = M2[:x_shape - y_shift, :]
+        M1 = M1[y_shift:, :]
+                
+    if plot_corr:
+        fig = plt.figure(facecolor = 'white')
+        plt.imshow(corr, cmap = 'RdYlGn')
+        plt.xlabel('', fontsize = plot_font)
+        plt.ylabel('', fontsize = plot_font)        
+        plt.title('Correlation between images', fontsize = plot_font)        
+
+    if inplace:
+        mag_obj1.data = M1
+        mag_obj2.data = M2   
+    else:
+        return M1, M2
